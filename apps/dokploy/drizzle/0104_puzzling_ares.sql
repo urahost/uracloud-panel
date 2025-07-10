@@ -1,0 +1,2 @@
+ALTER TABLE "project" ADD COLUMN "userId" text NOT NULL;--> statement-breakpoint
+ALTER TABLE "project" ADD CONSTRAINT "project_userId_user_temp_id_fk" FOREIGN KEY ("userId") REFERENCES "public"."user_temp"("id") ON DELETE cascade ON UPDATE no action;

@@ -119,7 +119,10 @@ export const users_temp = pgTable("user_temp", {
 		.default(false),
 	stripeCustomerId: text("stripeCustomerId"),
 	stripeSubscriptionId: text("stripeSubscriptionId"),
+	subscriptionStatus: text("subscriptionStatus"),
 	serversQuantity: integer("serversQuantity").notNull().default(0),
+	projectLimit: integer("projectLimit").notNull().default(1),
+	serviceLimit: integer("serviceLimit").notNull().default(2),
 });
 
 export const usersRelations = relations(users_temp, ({ one, many }) => ({
@@ -128,7 +131,6 @@ export const usersRelations = relations(users_temp, ({ one, many }) => ({
 		references: [account.userId],
 	}),
 	organizations: many(organization),
-	projects: many(projects),
 	apiKeys: many(apikey),
 	backups: many(backups),
 	schedules: many(schedules),

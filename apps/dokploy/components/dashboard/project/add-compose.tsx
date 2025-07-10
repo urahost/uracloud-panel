@@ -39,7 +39,7 @@ import { slugify } from "@/lib/slug";
 import { api } from "@/utils/api";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { CircuitBoard, HelpCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -75,8 +75,16 @@ export const AddCompose = ({ projectId, projectName }: Props) => {
 	const slug = slugify(projectName);
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: servers } = api.server.withSSHKey.useQuery();
+	const { data: auth } = api.user.get.useQuery();
 	const { mutateAsync, isLoading, error, isError } =
 		api.compose.create.useMutation();
+
+	const serviceLimitReached = useMemo(() => {
+		return (
+			!auth?.enablePaidFeatures &&
+			(auth?.totalServices ?? 0) >= (auth?.serviceLimit ?? 2)
+		);
+	}, [auth]);
 
 	const form = useForm<AddCompose>({
 		defaultValues: {
@@ -119,6 +127,8 @@ export const AddCompose = ({ projectId, projectName }: Props) => {
 				<DropdownMenuItem
 					className="w-full cursor-pointer space-x-3"
 					onSelect={(e) => e.preventDefault()}
+					disabled={serviceLimitReached}
+					title={serviceLimitReached ? "Limite de services atteinte pour la version gratuite" : undefined}
 				>
 					<CircuitBoard className="size-4 text-muted-foreground" />
 					<span>Compose</span>

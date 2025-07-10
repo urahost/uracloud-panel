@@ -823,6 +823,18 @@ export default function Page({ children }: Props) {
 						size="lg"
 					> */}
 					<LogoWrapper />
+					{auth && !auth.enablePaidFeatures && (
+						<div className="mb-4 p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-900 flex flex-col gap-2 mt-4">
+							<div className="font-semibold">Version gratuite</div>
+							<div>
+								Limite : {auth.projectLimit ?? 1} projet{(auth.projectLimit ?? 1) > 1 ? 's' : ''} et {auth.serviceLimit ?? 2} services maximum.
+							</div>
+							<div className="text-xs text-yellow-800">Passez à la version premium pour lever toutes les limites et débloquer toutes les fonctionnalités.</div>
+							<Link href="/dashboard/settings/billing">
+								<Button size="sm" variant="outline" className="bg-yellow-200 hover:bg-yellow-300 text-yellow-900 mt-2">Passer Premium</Button>
+							</Link>
+						</div>
+					)}
 					{/* </SidebarMenuButton> */}
 				</SidebarHeader>
 				<SidebarContent>

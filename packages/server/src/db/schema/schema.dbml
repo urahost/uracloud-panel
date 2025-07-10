@@ -755,6 +755,8 @@ table user {
   stripeCustomerId text
   stripeSubscriptionId text
   serversQuantity integer [not null, default: 0]
+  projectLimit integer [not null, default: 1]
+  serviceLimit integer [not null, default: 2]
 }
 
 table verification {

@@ -18,6 +18,7 @@ export default async function handler(
 	req: NextApiRequest,
 	res: NextApiResponse,
 ) {
+	console.log("[Stripe] Webhook endpoint hit", req.method, req.url);
 	if (!endpointSecret) {
 		return res.status(400).send("Webhook Error: Missing Stripe Secret Key");
 	}
@@ -59,188 +60,78 @@ export default async function handler(
 		case "checkout.session.completed": {
 			const session = event.data.object as Stripe.Checkout.Session;
 			const adminId = session?.metadata?.adminId as string;
-
-			const subscription = await stripe.subscriptions.retrieve(
-				session.subscription as string,
-			);
+			console.log("[Stripe] checkout.session.completed", { adminId, customer: session.customer, subscription: session.subscription });
 			await db
 				.update(users_temp)
 				.set({
 					stripeCustomerId: session.customer as string,
 					stripeSubscriptionId: session.subscription as string,
-					serversQuantity: subscription?.items?.data?.[0]?.quantity ?? 0,
+					subscriptionStatus: "active",
 				})
-				.where(eq(users_temp.id, adminId))
-				.returning();
-
-			const admin = await findUserById(adminId);
-			if (!admin) {
-				return res.status(400).send("Webhook Error: Admin not found");
-			}
-			const newServersQuantity = admin.serversQuantity;
-			await updateServersBasedOnQuantity(admin.id, newServersQuantity);
+				.where(eq(users_temp.id, adminId));
 			break;
 		}
 		case "customer.subscription.created": {
 			const newSubscription = event.data.object as Stripe.Subscription;
-
+			console.log("[Stripe] customer.subscription.created", { customer: newSubscription.customer, status: newSubscription.status });
 			await db
 				.update(users_temp)
 				.set({
 					stripeSubscriptionId: newSubscription.id,
 					stripeCustomerId: newSubscription.customer as string,
+					subscriptionStatus: newSubscription.status,
 				})
-				.where(
-					eq(users_temp.stripeCustomerId, newSubscription.customer as string),
-				)
-				.returning();
-
-			break;
-		}
-
-		case "customer.subscription.deleted": {
-			const newSubscription = event.data.object as Stripe.Subscription;
-
-			await db
-				.update(users_temp)
-				.set({
-					stripeSubscriptionId: null,
-					serversQuantity: 0,
-				})
-				.where(
-					eq(users_temp.stripeCustomerId, newSubscription.customer as string),
-				);
-
-			const admin = await findUserByStripeCustomerId(
-				newSubscription.customer as string,
-			);
-
-			if (!admin) {
-				return res.status(400).send("Webhook Error: Admin not found");
-			}
-
-			await disableServers(admin.id);
+				.where(eq(users_temp.stripeCustomerId, newSubscription.customer as string));
 			break;
 		}
 		case "customer.subscription.updated": {
 			const newSubscription = event.data.object as Stripe.Subscription;
-
-			const admin = await findUserByStripeCustomerId(
-				newSubscription.customer as string,
-			);
-
-			if (!admin) {
-				return res.status(400).send("Webhook Error: Admin not found");
-			}
-
-			if (newSubscription.status === "active") {
-				await db
-					.update(users_temp)
-					.set({
-						serversQuantity: newSubscription?.items?.data?.[0]?.quantity ?? 0,
-					})
-					.where(
-						eq(users_temp.stripeCustomerId, newSubscription.customer as string),
-					);
-
-				const newServersQuantity = admin.serversQuantity;
-				await updateServersBasedOnQuantity(admin.id, newServersQuantity);
-			} else {
-				await disableServers(admin.id);
-				await db
-					.update(users_temp)
-					.set({ serversQuantity: 0 })
-					.where(
-						eq(users_temp.stripeCustomerId, newSubscription.customer as string),
-					);
-			}
-
+			console.log("[Stripe] customer.subscription.updated", { customer: newSubscription.customer, status: newSubscription.status });
+			await db
+				.update(users_temp)
+				.set({
+					subscriptionStatus: newSubscription.status,
+				})
+				.where(eq(users_temp.stripeCustomerId, newSubscription.customer as string));
+			break;
+		}
+		case "customer.subscription.deleted": {
+			const newSubscription = event.data.object as Stripe.Subscription;
+			console.log("[Stripe] customer.subscription.deleted", { customer: newSubscription.customer, status: newSubscription.status });
+			await db
+				.update(users_temp)
+				.set({
+					stripeSubscriptionId: null,
+					subscriptionStatus: "canceled",
+				})
+				.where(eq(users_temp.stripeCustomerId, newSubscription.customer as string));
 			break;
 		}
 		case "invoice.payment_succeeded": {
 			const newInvoice = event.data.object as Stripe.Invoice;
-
-			const suscription = await stripe.subscriptions.retrieve(
-				newInvoice.subscription as string,
-			);
-
-			if (suscription.status !== "active") {
-				console.log(
-					`Skipping invoice.payment_succeeded for subscription ${suscription.id} with status ${suscription.status}`,
-				);
-				break;
-			}
-
-			await db
-				.update(users_temp)
-				.set({
-					serversQuantity: suscription?.items?.data?.[0]?.quantity ?? 0,
-				})
-				.where(eq(users_temp.stripeCustomerId, suscription.customer as string));
-
-			const admin = await findUserByStripeCustomerId(
-				suscription.customer as string,
-			);
-
-			if (!admin) {
-				return res.status(400).send("Webhook Error: Admin not found");
-			}
-			const newServersQuantity = admin.serversQuantity;
-			await updateServersBasedOnQuantity(admin.id, newServersQuantity);
+			console.log("[Stripe] invoice.payment_succeeded", { customer: newInvoice.customer, subscription: newInvoice.subscription });
 			break;
 		}
 		case "invoice.payment_failed": {
 			const newInvoice = event.data.object as Stripe.Invoice;
-
-			const subscription = await stripe.subscriptions.retrieve(
-				newInvoice.subscription as string,
-			);
-
-			if (subscription.status !== "active") {
-				const admin = await findUserByStripeCustomerId(
-					newInvoice.customer as string,
-				);
-
-				if (!admin) {
-					return res.status(400).send("Webhook Error: Admin not found");
-				}
-				await db
-					.update(users_temp)
-					.set({
-						serversQuantity: 0,
-					})
-					.where(
-						eq(users_temp.stripeCustomerId, newInvoice.customer as string),
-					);
-
-				await disableServers(admin.id);
-			}
-
+			console.log("[Stripe] invoice.payment_failed", { customer: newInvoice.customer, subscription: newInvoice.subscription });
 			break;
 		}
-
 		case "customer.deleted": {
 			const customer = event.data.object as Stripe.Customer;
-
-			const admin = await findUserByStripeCustomerId(customer.id);
-			if (!admin) {
-				return res.status(400).send("Webhook Error: Admin not found");
-			}
-
-			await disableServers(admin.id);
+			console.log("[Stripe] customer.deleted", { customer: customer.id });
 			await db
 				.update(users_temp)
 				.set({
 					stripeCustomerId: null,
 					stripeSubscriptionId: null,
-					serversQuantity: 0,
+					subscriptionStatus: null,
 				})
 				.where(eq(users_temp.stripeCustomerId, customer.id));
-
 			break;
 		}
 		default:
-			console.log(`Unhandled event type: ${event.type}`);
+			console.log(`[Stripe] Unhandled event type: ${event.type}`);
 	}
 
 	return res.status(200).json({ received: true });
