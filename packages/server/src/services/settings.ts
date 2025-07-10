@@ -16,23 +16,48 @@ export const DEFAULT_UPDATE_DATA: IUpdateData = {
 	updateAvailable: false,
 };
 
-/** Returns current Dokploy docker image tag or `latest` by default. */
-export const getDokployImageTag = () => {
-	return process.env.RELEASE_TAG || "canary-amd64";
+// Récupère dynamiquement le dernier tag de version depuis GHCR
+export const getLatestRemoteTag = async (): Promise<string> => {
+  // Utilise l'API GHCR pour lister les tags (nécessite que le repo soit public ou un token si privé)
+  const res = await fetch(
+    'https://ghcr.io/v2/urahost/uracloud-panel/dokploy/tags/list',
+    { headers: { Accept: 'application/json' } }
+  );
+  if (!res.ok) return 'latest';
+  const data = await res.json();
+  // Filtre les tags de type vX.Y.Z (ou adapte selon ta convention)
+  const tags = (data.tags || []).filter((t: string) => /^v\d+\.\d+\.\d+$/.test(t));
+  // Prend le dernier tag (en supposant qu'ils sont triés, sinon trie-les)
+  if (tags.length === 0) return 'latest';
+  // Trie par version décroissante
+  tags.sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
+  return tags[0];
 };
 
-export const getDokployImage = () => {
-	return `ghcr.io/urahost/uracloud-panel/dokploy:${getDokployImageTag()}`;
+export const getDokployImageTag = async () => {
+  return await getLatestRemoteTag();
+};
+
+export const getDokployImage = async () => {
+  const tag = await getDokployImageTag();
+  return `ghcr.io/urahost/uracloud-panel/dokploy:${tag}`;
 };
 
 export const pullLatestRelease = async () => {
-	console.log("Pulling image:", getDokployImage()); // Ajoute ce log
-	const stream = await docker.pull(getDokployImage());
-	await new Promise((resolve, reject) => {
-		docker.modem.followProgress(stream, (err, res) =>
-			err ? reject(err) : resolve(res),
-		);
-	});
+  const image = await getDokployImage();
+  console.log("Pulling image:", image);
+  const stream = await docker.pull(image);
+  await new Promise((resolve, reject) => {
+    docker.modem.followProgress(stream, (err, res) =>
+      err ? reject(err) : resolve(res),
+    );
+  });
+  console.log("Updating service dokploy to image:", image);
+  const { stdout, stderr } = await execAsync(
+    `docker service update --image ${image} dokploy`
+  );
+  console.log("Service update stdout:", stdout);
+  console.log("Service update stderr:", stderr);
 };
 
 /** Returns Dokploy docker service image digest */
@@ -80,7 +105,7 @@ export const getUpdateData = async (): Promise<IUpdateData> => {
 		url = data?.next;
 	}
 
-	const imageTag = getDokployImageTag();
+	const imageTag = await getDokployImageTag();
 	const searchedDigest = allResults.find((t) => t.name === imageTag)?.digest;
 
 	if (!searchedDigest) {
