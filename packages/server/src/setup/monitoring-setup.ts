@@ -13,8 +13,9 @@ export const setupMonitoring = async (serverId: string) => {
 	const containerName = "dokploy-monitoring";
 	let imageName = "dokploy/monitoring:latest";
 
+	const dokployImageTag = await getDokployImageTag();
 	if (
-		(getDokployImageTag() !== "latest" ||
+		(dokployImageTag !== "latest" ||
 			process.env.NODE_ENV === "development") &&
 		!IS_CLOUD
 	) {
@@ -86,8 +87,9 @@ export const setupWebMonitoring = async (userId: string) => {
 	const containerName = "dokploy-monitoring";
 	let imageName = "dokploy/monitoring:latest";
 
+	const dokployImageTag = await getDokployImageTag();
 	if (
-		(getDokployImageTag() !== "latest" ||
+		(dokployImageTag !== "latest" ||
 			process.env.NODE_ENV === "development") &&
 		!IS_CLOUD
 	) {
