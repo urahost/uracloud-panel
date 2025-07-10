@@ -58,6 +58,7 @@ import { nanoid } from "nanoid";
 import { parse } from "toml";
 import { z } from "zod";
 import { createTRPCRouter, protectedProcedure, publicProcedure } from "../trpc";
+import { projects } from "@/server/db/schema";
 
 export const composeRouter = createTRPCRouter({
 	create: protectedProcedure
@@ -85,6 +86,37 @@ export const composeRouter = createTRPCRouter({
 						code: "UNAUTHORIZED",
 						message: "You are not authorized to access this project",
 					});
+				}
+				if (!ctx.user.enablePaidFeatures) {
+					const userProjects = await db.query.projects.findMany({
+						where: eq(projects.userId, ctx.user.id),
+						with: {
+							applications: true,
+							mariadb: true,
+							mongo: true,
+							mysql: true,
+							postgres: true,
+							redis: true,
+							compose: true,
+						},
+					});
+					const totalServices = userProjects.reduce((acc, p) =>
+						acc +
+							(p.applications?.length || 0) +
+							(p.mariadb?.length || 0) +
+							(p.mongo?.length || 0) +
+							(p.mysql?.length || 0) +
+							(p.postgres?.length || 0) +
+							(p.redis?.length || 0) +
+							(p.compose?.length || 0),
+						0,
+					);
+					if (totalServices >= (ctx.user.serviceLimit ?? 2)) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "Limite de services atteinte pour la version gratuite. Passez premium pour créer plus de services.",
+						});
+					}
 				}
 				const newService = await createCompose(input);
 
@@ -443,424 +475,6 @@ export const composeRouter = createTRPCRouter({
 			}
 			const command = createCommand(compose);
 			return `docker ${command}`;
-		}),
-	refreshToken: protectedProcedure
-		.input(apiFindCompose)
-		.mutation(async ({ input, ctx }) => {
-			const compose = await findComposeById(input.composeId);
-			if (compose.project.organizationId !== ctx.session.activeOrganizationId) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You are not authorized to refresh this compose",
-				});
-			}
-			await updateCompose(input.composeId, {
-				refreshToken: nanoid(),
-			});
-			return true;
-		}),
-	deployTemplate: protectedProcedure
-		.input(
-			z.object({
-				projectId: z.string(),
-				serverId: z.string().optional(),
-				id: z.string(),
-				baseUrl: z.string().optional(),
-			}),
-		)
-		.mutation(async ({ ctx, input }) => {
-			if (ctx.user.role === "member") {
-				await checkServiceAccess(
-					ctx.user.id,
-					input.projectId,
-					ctx.session.activeOrganizationId,
-					"create",
-				);
-			}
-
-			if (IS_CLOUD && !input.serverId) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You need to use a server to create a compose",
-				});
-			}
-
-			const template = await fetchTemplateFiles(input.id, input.baseUrl);
-
-			const admin = await findUserById(ctx.user.ownerId);
-			let serverIp = admin.serverIp || "127.0.0.1";
-
-			const project = await findProjectById(input.projectId);
-
-			if (input.serverId) {
-				const server = await findServerById(input.serverId);
-				serverIp = server.ipAddress;
-			} else if (process.env.NODE_ENV === "development") {
-				serverIp = "127.0.0.1";
-			}
-
-			const projectName = slugify(`${project.name} ${input.id}`);
-			const appName = `${projectName}-${generatePassword(6)}`;
-			const config = {
-				...template.config,
-				variables: {
-					APP_NAME: appName,
-					...template.config.variables,
-				},
-			};
-			const generate = processTemplate(config, {
-				serverIp: serverIp,
-				projectName: projectName,
-			});
-
-			const compose = await createComposeByTemplate({
-				...input,
-				composeFile: template.dockerCompose,
-				env: generate.envs?.join("\n"),
-				serverId: input.serverId,
-				name: input.id,
-				sourceType: "raw",
-				appName: appName,
-				isolatedDeployment: true,
-			});
-
-			if (ctx.user.role === "member") {
-				await addNewService(
-					ctx.user.id,
-					compose.composeId,
-					ctx.session.activeOrganizationId,
-				);
-			}
-
-			if (generate.mounts && generate.mounts?.length > 0) {
-				for (const mount of generate.mounts) {
-					await createMount({
-						filePath: mount.filePath,
-						mountPath: "",
-						content: mount.content,
-						serviceId: compose.composeId,
-						serviceType: "compose",
-						type: "file",
-					});
-				}
-			}
-
-			if (generate.domains && generate.domains?.length > 0) {
-				for (const domain of generate.domains) {
-					await createDomain({
-						...domain,
-						domainType: "compose",
-						certificateType: "none",
-						composeId: compose.composeId,
-						host: domain.host || "",
-					});
-				}
-			}
-
-			return compose;
-		}),
-
-	templates: publicProcedure
-		.input(z.object({ baseUrl: z.string().optional() }))
-		.query(async ({ input }) => {
-			try {
-				const githubTemplates = await fetchTemplatesList(input.baseUrl);
-
-				if (githubTemplates.length > 0) {
-					return githubTemplates;
-				}
-			} catch (error) {
-				console.warn(
-					"Failed to fetch templates from GitHub, falling back to local templates:",
-					error,
-				);
-			}
-			return [];
-		}),
-
-	getTags: protectedProcedure
-		.input(z.object({ baseUrl: z.string().optional() }))
-		.query(async ({ input }) => {
-			const githubTemplates = await fetchTemplatesList(input.baseUrl);
-
-			const allTags = githubTemplates.flatMap((template) => template.tags);
-			const uniqueTags = _.uniq(allTags);
-			return uniqueTags;
-		}),
-	disconnectGitProvider: protectedProcedure
-		.input(apiFindCompose)
-		.mutation(async ({ input, ctx }) => {
-			const compose = await findComposeById(input.composeId);
-			if (compose.project.organizationId !== ctx.session.activeOrganizationId) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You are not authorized to disconnect this git provider",
-				});
-			}
-
-			// Reset all git provider related fields
-			await updateCompose(input.composeId, {
-				// GitHub fields
-				repository: null,
-				branch: null,
-				owner: null,
-				composePath: undefined,
-				githubId: null,
-				triggerType: "push",
-
-				// GitLab fields
-				gitlabRepository: null,
-				gitlabOwner: null,
-				gitlabBranch: null,
-				gitlabId: null,
-				gitlabProjectId: null,
-				gitlabPathNamespace: null,
-
-				// Bitbucket fields
-				bitbucketRepository: null,
-				bitbucketOwner: null,
-				bitbucketBranch: null,
-				bitbucketId: null,
-
-				// Gitea fields
-				giteaRepository: null,
-				giteaOwner: null,
-				giteaBranch: null,
-				giteaId: null,
-
-				// Custom Git fields
-				customGitBranch: null,
-				customGitUrl: null,
-				customGitSSHKeyId: null,
-
-				// Common fields
-				sourceType: "github", // Reset to default
-				composeStatus: "idle",
-				watchPaths: null,
-				enableSubmodules: false,
-			});
-
-			return true;
-		}),
-
-	move: protectedProcedure
-		.input(
-			z.object({
-				composeId: z.string(),
-				targetProjectId: z.string(),
-			}),
-		)
-		.mutation(async ({ input, ctx }) => {
-			const compose = await findComposeById(input.composeId);
-			if (compose.project.organizationId !== ctx.session.activeOrganizationId) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You are not authorized to move this compose",
-				});
-			}
-
-			const targetProject = await findProjectById(input.targetProjectId);
-			if (targetProject.organizationId !== ctx.session.activeOrganizationId) {
-				throw new TRPCError({
-					code: "UNAUTHORIZED",
-					message: "You are not authorized to move to this project",
-				});
-			}
-
-			const updatedCompose = await db
-				.update(composeTable)
-				.set({
-					projectId: input.targetProjectId,
-				})
-				.where(eq(composeTable.composeId, input.composeId))
-				.returning()
-				.then((res) => res[0]);
-
-			if (!updatedCompose) {
-				throw new TRPCError({
-					code: "INTERNAL_SERVER_ERROR",
-					message: "Failed to move compose",
-				});
-			}
-
-			return updatedCompose;
-		}),
-
-	processTemplate: protectedProcedure
-		.input(
-			z.object({
-				base64: z.string(),
-				composeId: z.string().min(1),
-			}),
-		)
-		.mutation(async ({ input, ctx }) => {
-			try {
-				const compose = await findComposeById(input.composeId);
-
-				if (
-					compose.project.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this compose",
-					});
-				}
-
-				const decodedData = Buffer.from(input.base64, "base64").toString(
-					"utf-8",
-				);
-				const admin = await findUserById(ctx.user.ownerId);
-				let serverIp = admin.serverIp || "127.0.0.1";
-
-				if (compose.serverId) {
-					const server = await findServerById(compose.serverId);
-					serverIp = server.ipAddress;
-				} else if (process.env.NODE_ENV === "development") {
-					serverIp = "127.0.0.1";
-				}
-				const templateData = JSON.parse(decodedData);
-				const config = parse(templateData.config) as CompleteTemplate;
-
-				if (!templateData.compose || !config) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message:
-							"Invalid template format. Must contain compose and config fields",
-					});
-				}
-
-				const configModified = {
-					...config,
-					variables: {
-						APP_NAME: compose.appName,
-						...config.variables,
-					},
-				};
-
-				const processedTemplate = processTemplate(configModified, {
-					serverIp: serverIp,
-					projectName: compose.appName,
-				});
-
-				return {
-					compose: templateData.compose,
-					template: processedTemplate,
-				};
-			} catch (error) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: `Error processing template: ${error instanceof Error ? error.message : error}`,
-				});
-			}
-		}),
-
-	import: protectedProcedure
-		.input(
-			z.object({
-				base64: z.string(),
-				composeId: z.string().min(1),
-			}),
-		)
-		.mutation(async ({ input, ctx }) => {
-			try {
-				const compose = await findComposeById(input.composeId);
-				const decodedData = Buffer.from(input.base64, "base64").toString(
-					"utf-8",
-				);
-
-				if (
-					compose.project.organizationId !== ctx.session.activeOrganizationId
-				) {
-					throw new TRPCError({
-						code: "UNAUTHORIZED",
-						message: "You are not authorized to update this compose",
-					});
-				}
-
-				for (const mount of compose.mounts) {
-					await deleteMount(mount.mountId);
-				}
-
-				for (const domain of compose.domains) {
-					await removeDomainById(domain.domainId);
-				}
-
-				const admin = await findUserById(ctx.user.ownerId);
-				let serverIp = admin.serverIp || "127.0.0.1";
-
-				if (compose.serverId) {
-					const server = await findServerById(compose.serverId);
-					serverIp = server.ipAddress;
-				} else if (process.env.NODE_ENV === "development") {
-					serverIp = "127.0.0.1";
-				}
-
-				const templateData = JSON.parse(decodedData);
-
-				const config = parse(templateData.config) as CompleteTemplate;
-
-				if (!templateData.compose || !config) {
-					throw new TRPCError({
-						code: "BAD_REQUEST",
-						message:
-							"Invalid template format. Must contain compose and config fields",
-					});
-				}
-
-				const configModified = {
-					...config,
-					variables: {
-						APP_NAME: compose.appName,
-						...config.variables,
-					},
-				};
-
-				const processedTemplate = processTemplate(configModified, {
-					serverIp: serverIp,
-					projectName: compose.appName,
-				});
-
-				await updateCompose(input.composeId, {
-					composeFile: templateData.compose,
-					sourceType: "raw",
-					env: processedTemplate.envs?.join("\n"),
-					isolatedDeployment: true,
-				});
-
-				if (processedTemplate.mounts && processedTemplate.mounts.length > 0) {
-					for (const mount of processedTemplate.mounts) {
-						await createMount({
-							filePath: mount.filePath,
-							mountPath: "",
-							content: mount.content,
-							serviceId: compose.composeId,
-							serviceType: "compose",
-							type: "file",
-						});
-					}
-				}
-
-				if (processedTemplate.domains && processedTemplate.domains.length > 0) {
-					for (const domain of processedTemplate.domains) {
-						await createDomain({
-							...domain,
-							domainType: "compose",
-							certificateType: "none",
-							composeId: compose.composeId,
-							host: domain.host || "",
-						});
-					}
-				}
-
-				return {
-					success: true,
-					message: "Template imported successfully",
-				};
-			} catch (error) {
-				throw new TRPCError({
-					code: "BAD_REQUEST",
-					message: `Error importing template: ${error instanceof Error ? error.message : error}`,
-				});
-			}
-		}),
+		},
+	),
 });

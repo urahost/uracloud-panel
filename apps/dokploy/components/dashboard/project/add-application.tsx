@@ -43,6 +43,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useMemo } from "react";
 
 const AddTemplateSchema = z.object({
 	name: z.string().min(1, {
@@ -74,9 +75,17 @@ export const AddApplication = ({ projectId, projectName }: Props) => {
 	const [visible, setVisible] = useState(false);
 	const slug = slugify(projectName);
 	const { data: servers } = api.server.withSSHKey.useQuery();
+	const { data: auth } = api.user.get.useQuery();
 
 	const { mutateAsync, isLoading, error, isError } =
 		api.application.create.useMutation();
+
+	const serviceLimitReached = useMemo(() => {
+		return (
+			!auth?.enablePaidFeatures &&
+			(auth?.totalServices ?? 0) >= (auth?.serviceLimit ?? 2)
+		);
+	}, [auth]);
 
 	const form = useForm<AddTemplate>({
 		defaultValues: {
@@ -114,6 +123,8 @@ export const AddApplication = ({ projectId, projectName }: Props) => {
 				<DropdownMenuItem
 					className="w-full cursor-pointer space-x-3"
 					onSelect={(e) => e.preventDefault()}
+					disabled={serviceLimitReached}
+					title={serviceLimitReached ? "Limite de services atteinte pour la version gratuite" : undefined}
 				>
 					<Folder className="size-4 text-muted-foreground" />
 					<span>Application</span>

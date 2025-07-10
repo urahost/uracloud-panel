@@ -65,6 +65,18 @@ export const projectRouter = createTRPCRouter({
 					);
 				}
 
+				if (!ctx.user.enablePaidFeatures) {
+					const userProjects = await db.query.projects.findMany({
+						where: eq(projects.userId, ctx.user.id),
+					});
+					if (userProjects.length >= (ctx.user.projectLimit ?? 1)) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "Limite de projets atteinte pour la version gratuite. Passez premium pour créer plus de projets.",
+						});
+					}
+				}
+
 				const admin = await findUserById(ctx.user.ownerId);
 
 				if (admin.serversQuantity === 0 && IS_CLOUD) {

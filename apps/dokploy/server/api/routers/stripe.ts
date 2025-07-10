@@ -24,9 +24,23 @@ export const stripeRouter = createTRPCRouter({
 			active: true,
 		});
 
+		// Pour chaque produit, on récupère tous les prix associés (mensuel, annuel, etc.)
+		const productsWithPrices = await Promise.all(
+			products.data.map(async (product) => {
+				const prices = await stripe.prices.list({
+					product: product.id,
+					active: true,
+				});
+				return {
+					...product,
+					prices: prices.data,
+				};
+			})
+		);
+
 		if (!stripeCustomerId) {
 			return {
-				products: products.data,
+				products: productsWithPrices,
 				subscriptions: [],
 			};
 		}
@@ -38,15 +52,14 @@ export const stripeRouter = createTRPCRouter({
 		});
 
 		return {
-			products: products.data,
+			products: productsWithPrices,
 			subscriptions: subscriptions.data,
 		};
 	}),
 	createCheckoutSession: adminProcedure
 		.input(
 			z.object({
-				productId: z.string(),
-				serverQuantity: z.number().min(1),
+				priceId: z.string(),
 				isAnnual: z.boolean(),
 			}),
 		)
@@ -55,7 +68,12 @@ export const stripeRouter = createTRPCRouter({
 				apiVersion: "2024-09-30.acacia",
 			});
 
-			const items = getStripeItems(input.serverQuantity, input.isAnnual);
+			const items = [
+				{
+					price: input.priceId,
+					quantity: 1,
+				},
+			];
 			const user = await findUserById(ctx.user.id);
 
 			let stripeCustomerId = user.stripeCustomerId;

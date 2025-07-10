@@ -25,7 +25,7 @@ import { api } from "@/utils/api";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { PlusIcon, SquarePen } from "lucide-react";
 import { useRouter } from "next/router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
@@ -84,6 +84,14 @@ export const HandleProject = ({ projectId }: Props) => {
 		resolver: zodResolver(AddProjectSchema),
 	});
 
+	const { data: auth } = api.user.get.useQuery();
+	const projectLimitReached = useMemo(() => {
+		return (
+			!auth?.enablePaidFeatures &&
+			(auth?.projects?.length ?? 0) >= (auth?.projectLimit ?? 1)
+		);
+	}, [auth]);
+
 	useEffect(() => {
 		form.reset({
 			description: data?.description ?? "",
@@ -126,7 +134,7 @@ export const HandleProject = ({ projectId }: Props) => {
 						<span>Update</span>
 					</DropdownMenuItem>
 				) : (
-					<Button>
+					<Button disabled={projectLimitReached} title={projectLimitReached ? "Limite de projets atteinte pour la version gratuite" : undefined}>
 						<PlusIcon className="h-4 w-4" />
 						Create Project
 					</Button>

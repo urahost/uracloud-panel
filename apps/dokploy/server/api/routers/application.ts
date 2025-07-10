@@ -57,6 +57,7 @@ import { TRPCError } from "@trpc/server";
 import { eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { z } from "zod";
+import { projects } from "@/server/db/schema";
 
 export const applicationRouter = createTRPCRouter({
 	create: protectedProcedure
@@ -85,6 +86,38 @@ export const applicationRouter = createTRPCRouter({
 						code: "UNAUTHORIZED",
 						message: "You are not authorized to access this project",
 					});
+				}
+				if (!ctx.user.enablePaidFeatures) {
+					// Compte tous les services de l'utilisateur (applications, db, compose, etc.)
+					const userProjects = await db.query.projects.findMany({
+						where: eq(projects.userId, ctx.user.id),
+						with: {
+							applications: true,
+							mariadb: true,
+							mongo: true,
+							mysql: true,
+							postgres: true,
+							redis: true,
+							compose: true,
+						},
+					});
+					const totalServices = userProjects.reduce((acc, p) =>
+						acc +
+							(p.applications?.length || 0) +
+							(p.mariadb?.length || 0) +
+							(p.mongo?.length || 0) +
+							(p.mysql?.length || 0) +
+							(p.postgres?.length || 0) +
+							(p.redis?.length || 0) +
+							(p.compose?.length || 0),
+						0,
+					);
+					if (totalServices >= (ctx.user.serviceLimit ?? 2)) {
+						throw new TRPCError({
+							code: "FORBIDDEN",
+							message: "Limite de services atteinte pour la version gratuite. Passez premium pour créer plus de services.",
+						});
+					}
 				}
 				const newApplication = await createApplication(input);
 

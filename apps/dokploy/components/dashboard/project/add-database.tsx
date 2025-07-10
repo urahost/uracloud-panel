@@ -45,6 +45,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { useMemo } from "react";
 
 type DbType = typeof mySchema._type.type;
 
@@ -162,6 +163,14 @@ export const AddDatabase = ({ projectId, projectName }: Props) => {
 	const redisMutation = api.redis.create.useMutation();
 	const mariadbMutation = api.mariadb.create.useMutation();
 	const mysqlMutation = api.mysql.create.useMutation();
+	const { data: auth } = api.user.get.useQuery();
+
+	const serviceLimitReached = useMemo(() => {
+		return (
+			!auth?.enablePaidFeatures &&
+			(auth?.totalServices ?? 0) >= (auth?.serviceLimit ?? 2)
+		);
+	}, [auth]);
 
 	const form = useForm<AddDatabase>({
 		defaultValues: {
@@ -278,6 +287,8 @@ export const AddDatabase = ({ projectId, projectName }: Props) => {
 				<DropdownMenuItem
 					className="w-full cursor-pointer space-x-3"
 					onSelect={(e) => e.preventDefault()}
+					disabled={serviceLimitReached}
+					title={serviceLimitReached ? "Limite de services atteinte pour la version gratuite" : undefined}
 				>
 					<Database className="size-4 text-muted-foreground" />
 					<span>Database</span>
