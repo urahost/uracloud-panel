@@ -22,7 +22,9 @@ export const getDokployImageTag = () => {
 };
 
 export const getDokployImage = () => {
-	return `dokploy/dokploy:${getDokployImageTag()}`;
+	// Permet d'utiliser un repo custom si défini
+	const repo = process.env.REPO_DOCKER_IMAGE || "dokploy/dokploy";
+	return `${repo}:${getDokployImageTag()}`;
 };
 
 export const pullLatestRelease = async () => {
