@@ -1,6 +1,6 @@
 {
 	"name": "dokploy",
-	"version": "v0.24.0",
+	"version": "0.24.1",
 	"private": true,
 	"license": "Apache-2.0",
 	"type": "module",
@@ -198,6 +198,8 @@
 		]
 	},
 	"commitlint": {
-		"extends": ["@commitlint/config-conventional"]
+		"extends": [
+			"@commitlint/config-conventional"
+		]
 	}
 }
