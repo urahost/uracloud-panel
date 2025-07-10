@@ -18,14 +18,15 @@ export const DEFAULT_UPDATE_DATA: IUpdateData = {
 
 /** Returns current Dokploy docker image tag or `latest` by default. */
 export const getDokployImageTag = () => {
-	return "canary-amd64";
+	return process.env.RELEASE_TAG || "canary-amd64";
 };
 
 export const getDokployImage = () => {
-	return ` ghcr.io/urahost/uracloud-panel/dokploy:canary-amd64`;
+	return `ghcr.io/urahost/uracloud-panel/dokploy:${getDokployImageTag()}`;
 };
 
 export const pullLatestRelease = async () => {
+	console.log("Pulling image:", getDokployImage()); // Ajoute ce log
 	const stream = await docker.pull(getDokployImage());
 	await new Promise((resolve, reject) => {
 		docker.modem.followProgress(stream, (err, res) =>
