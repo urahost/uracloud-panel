@@ -3,24 +3,18 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { NumberInput } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { api } from "@/utils/api";
 import { loadStripe } from "@stripe/stripe-js";
-import clsx from "clsx";
 import {
   AlertTriangle,
-  CheckIcon,
   CreditCard,
   Loader2,
-  MinusIcon,
-  PlusIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
@@ -52,16 +46,23 @@ export const ShowBilling = () => {
   const [isAnnual, setIsAnnual] = useState(false);
 
   const handleCheckout = async (priceId: string) => {
+    console.log('[Billing] handleCheckout called with priceId:', priceId);
     const stripe = await stripePromise;
     if (data && data.subscriptions.length === 0 && priceId) {
+      console.log('[Billing] Creating checkout session for priceId:', priceId, 'isAnnual:', isAnnual);
       createCheckoutSession({
         priceId,
         isAnnual,
       }).then(async (session) => {
+        console.log('[Billing] Checkout session response:', session);
         await stripe?.redirectToCheckout({
           sessionId: session.sessionId,
         });
+      }).catch((err) => {
+        console.error('[Billing] Error creating checkout session:', err);
       });
+    } else {
+      console.log('[Billing] No eligible subscription or priceId missing', { data, priceId });
     }
   };
   // Remplace l'ancien filtrage par défaut
@@ -109,12 +110,26 @@ export const ShowBilling = () => {
     <div className="w-full">
       <Card className="h-full bg-sidebar  p-2.5 rounded-xl  max-w-5xl mx-auto">
         <div className="rounded-xl bg-background shadow-md ">
-          <CardHeader className="">
-            <CardTitle className="text-xl flex flex-row gap-2">
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
               <CreditCard className="size-6 text-muted-foreground self-center" />
-              Billing
-            </CardTitle>
-            <CardDescription>Manage your subscription</CardDescription>
+              <CardTitle className="text-xl">Billing</CardTitle>
+            </div>
+            {/* Bouton Gérer mon abonnement aligné à droite */}
+            {admin?.user?.hasActiveSubscription && (
+              <Button
+                className="w-fit"
+                variant="outline"
+                onClick={async () => {
+                  const res = await createCustomerPortalSession();
+                  if (res?.url) {
+                    window.location.href = res.url;
+                  }
+                }}
+              >
+                Gérer mon abonnement
+              </Button>
+            )}
           </CardHeader>
           <CardContent className="space-y-2 py-8 border-t">
             <div className="flex flex-col gap-4 w-full">
@@ -124,27 +139,34 @@ export const ShowBilling = () => {
                 className="w-full"
                 onValueChange={(e) => setIsAnnual(e === "annual")}
               >
-                <TabsList>
-                  <TabsTrigger value="monthly">Monthly</TabsTrigger>
-                  <TabsTrigger value="annual">Annual</TabsTrigger>
-                </TabsList>
+              {
+                !admin?.user.hasActiveSubscription && (
+                  <TabsList>
+                    <TabsTrigger value="monthly">Mensuel</TabsTrigger>
+                    <TabsTrigger value="annual">Annuel</TabsTrigger>
+                  </TabsList>
+                )
+              }
               </Tabs>
-              {admin?.user.stripeSubscriptionId && (
+              {admin?.user.hasActiveSubscription && (
                 <div className="space-y-2 flex flex-col">
-                  <h3 className="text-lg font-medium">Servers Plan</h3>
-                  <p className="text-sm text-muted-foreground">
-                    You have {servers} server on your plan of{" "}
-                    {admin?.user.serversQuantity} servers
-                  </p>
-                  <div>
-                    <Progress value={safePercentage} className="max-w-lg" />
+                  <h3 className="text-lg font-medium">Votre plan</h3>
+                  <div className="flex flex-row gap-2 items-center">
+                    <Badge variant="outline">{admin?.user.projectsCount ?? 0} / {admin?.user.projectLimit} projet{(admin?.user.projectLimit ?? 0) > 1 ? 's' : ''}</Badge>
+                    <Badge variant="outline">{admin?.user.servicesCount ?? 0} / {admin?.user.serviceLimit} service{(admin?.user.serviceLimit ?? 0) > 1 ? 's' : ''}</Badge>
                   </div>
-                  {admin && admin.user.serversQuantity! <= (servers ?? 0) && (
+
+                  <div className="flex flex-col gap-2 max-w-lg">
+                    <span className="text-xs text-muted-foreground">Projets</span>
+                    <Progress value={((admin?.user.projectsCount ?? 0) / (admin?.user.projectLimit ?? 1)) * 100} />
+                    <span className="text-xs text-muted-foreground mt-2">Services</span>
+                    <Progress value={((admin?.user.servicesCount ?? 0) / (admin?.user.serviceLimit ?? 1)) * 100} />
+                  </div>
+                  {admin && ((admin.user.projectLimit ?? 0) <= (admin.user.projectsCount ?? 0) || (admin.user.serviceLimit ?? 0) <= (admin.user.servicesCount ?? 0)) && (
                     <div className="flex flex-row gap-4 p-2 bg-yellow-50 dark:bg-yellow-950 rounded-lg items-center">
                       <AlertTriangle className="text-yellow-600 dark:text-yellow-400" />
                       <span className="text-sm text-yellow-600 dark:text-yellow-400">
-                        You have reached the maximum number of servers you can
-                        create, please upgrade your plan to add more servers.
+                        Vous avez atteint le nombre maximum de projets ou de services que vous pouvez créer, veuillez mettre à niveau votre plan pour en ajouter plus.
                       </span>
                     </div>
                   )}
@@ -152,14 +174,14 @@ export const ShowBilling = () => {
               )}
               <div className="flex flex-col gap-1.5 mt-4">
                 <span className="text-base text-primary">
-                  Need Help? We are here to help you.
+                  Besoin d'aide ? Nous sommes là pour vous aider.
                 </span>
                 <span className="text-sm text-muted-foreground">
-                  Join to our Discord server and we will help you.
+                  Rejoignez notre serveur Discord et nous vous aiderons.
                 </span>
                 <Button className="rounded-full bg-[#5965F2] hover:bg-[#4A55E0] w-fit">
                   <Link
-                    href="https://discord.gg/2tBnJ3jDJc"
+                    href="https://discord.gg/urahost"
                     aria-label="Dokploy on GitHub"
                     target="_blank"
                     className="flex flex-row items-center gap-2 text-white"
@@ -184,83 +206,57 @@ export const ShowBilling = () => {
               ) : (
                 <>
                   {/* Affichage des deux abonnements */}
-                  {/* Debug Stripe products */}
-                  <div className="flex flex-col md:flex-row gap-6 mt-6">
-                    {filteredProducts.map((product) => {
-                      const price = product.selected_price;
-                      return (
-                        <label
-                          key={product.id}
-                          className={cn(
-                            "flex-1 border rounded-2xl p-6 cursor-pointer transition-all flex flex-col gap-2 shadow-sm hover:border-primary",
-                            selectedPriceId === price?.id && "border-primary ring-2 ring-primary"
-                          )}
-                        >
-                          <div className="flex items-center gap-3 mb-2">
-                            <input
-                              type="radio"
-                              name="product"
-                              value={price?.id}
-                              checked={selectedPriceId === price?.id}
-                              onChange={() => setSelectedPriceId(price?.id ?? null)}
-                              className="accent-primary"
-                            />
-                            <span className="font-bold text-lg text-primary">
-                              {product.name}
-                            </span>
-                            {selectedPriceId === price?.id && (
-                              <Badge variant="outline">Sélectionné</Badge>
-                            )}
-                          </div>
-                          <div className="text-sm text-muted-foreground mb-2">
-                            {product.description}
-                          </div>
-                          <div className="flex flex-col gap-1 mb-2">
-                            <span className="text-primary font-bold text-xl">
-                              {price && price.unit_amount
-                                ? `${(price.unit_amount / 100).toFixed(2)} ${price.currency?.toUpperCase() || "USD"} /${isAnnual ? "an" : "mois"}`
-                                : isAnnual
-                                  ? `${calculatePrice(1, true).toFixed(2)} $/an`
-                                  : `${calculatePrice(1, false).toFixed(2)} $/mois`}
-                            </span>
-                            {isAnnual && price && price.unit_amount && (
-                              <span className="text-xs text-muted-foreground">
-                                Soit {((price.unit_amount / 100) / 12).toFixed(2)} {price.currency?.toUpperCase() || "USD"} /mois
-                              </span>
-                            )}
-                          </div>
-                          <ul className="mt-2 flex flex-col gap-y-1 text-sm text-muted-foreground pl-2 list-disc">
-                            {product.name.toLowerCase().includes("premium") ? (
-                              <>
-                                <li>Tout illimité</li>
-                                <li>Support prioritaire</li>
-                                <li>Backups avancés</li>
-                                <li>Accès à toutes les fonctionnalités</li>
-                              </>
-                            ) : (
-                              <>
-                                <li>Limite de projets/services augmentée</li>
-                                <li>Support standard</li>
-                                <li>Backups de base</li>
-                              </>
-                            )}
-                          </ul>
-                          {selectedPriceId === price?.id && (
-                            <Button
-                              className="w-full mt-6"
-                              size="lg"
-                              onClick={async (e) => {
-                                e.preventDefault();
-                                if (price?.id) await handleCheckout(price.id);
-                              }}
+                  {!admin?.user?.hasActiveSubscription && (
+                    <>
+                      <div className="flex flex-col md:flex-row gap-6 mt-6">
+                        {filteredProducts.map((product) => {
+                          const price = product.selected_price;
+                          return (
+                            <label
+                              key={product.id}
+                              className={cn(
+                                "flex-1 border rounded-2xl p-6 cursor-pointer transition-all flex flex-col gap-2 shadow-sm hover:border-primary",
+                                selectedPriceId === price?.id && "border-primary ring-2 ring-primary"
+                              )}
                             >
-                              S'abonner
-                            </Button>
-                          )}
-                        </label>
-                      );
-                    })}
-                  </div>
+                              <div className="flex items-center gap-3 mb-2">
+                                <input
+                                  type="radio"
+                                  name="plan"
+                                  checked={selectedPriceId === price?.id}
+                                  onChange={() => {
+                                    setSelectedPriceId(price?.id ?? null);
+                                    console.log('[Billing] Offer selected:', price?.id);
+                                  }}
+                                  className="accent-primary"
+                                />
+                                <span className="font-semibold text-lg">{product.name}</span>
+                              </div>
+                              <div className="text-sm text-muted-foreground">{product.description}</div>
+                              <div className="mt-2 font-bold text-xl">
+                                {price?.unit_amount && (price.unit_amount / 100).toLocaleString()} €
+                                <span className="text-xs font-normal text-muted-foreground ml-1">
+                                  /{isAnnual ? "an" : "mois"}
+                                </span>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                      <div className="flex justify-end mt-4">
+                        <Button
+                          onClick={() => {
+                            console.log('[Billing] S’abonner clicked, selectedPriceId:', selectedPriceId);
+                            if (selectedPriceId) handleCheckout(selectedPriceId);
+                          }}
+                          disabled={!selectedPriceId}
+                          className="px-8"
+                        >
+                          S’abonner
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </>
               )}
             </div>

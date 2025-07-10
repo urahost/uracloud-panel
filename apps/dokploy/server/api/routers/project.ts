@@ -89,6 +89,7 @@ export const projectRouter = createTRPCRouter({
 				const project = await createProject(
 					input,
 					ctx.session.activeOrganizationId,
+					ctx.user.id
 				);
 				if (ctx.user.role === "member") {
 					await addNewProject(

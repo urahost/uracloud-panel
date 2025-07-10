@@ -8,10 +8,13 @@ import {
 import { TRPCError } from "@trpc/server";
 import Stripe from "stripe";
 import { z } from "zod";
-import { adminProcedure, createTRPCRouter } from "../trpc";
+import { createTRPCRouter, publicProcedure } from "../trpc";
 
 export const stripeRouter = createTRPCRouter({
-	getProducts: adminProcedure.query(async ({ ctx }) => {
+	getProducts: publicProcedure.query(async ({ ctx }) => {
+		if (!ctx.user) {
+			throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+		}
 		const user = await findUserById(ctx.user.ownerId);
 		const stripeCustomerId = user.stripeCustomerId;
 
@@ -51,12 +54,17 @@ export const stripeRouter = createTRPCRouter({
 			expand: ["data.items.data.price"],
 		});
 
+		// Ne garder que les subscriptions vraiment actives (pas en cours d'annulation)
+		const activeSubscriptions = subscriptions.data.filter(
+			(sub) => sub.status === "active" && sub.cancel_at_period_end === false
+		);
+
 		return {
 			products: productsWithPrices,
-			subscriptions: subscriptions.data,
+			subscriptions: activeSubscriptions,
 		};
 	}),
-	createCheckoutSession: adminProcedure
+	createCheckoutSession: publicProcedure
 		.input(
 			z.object({
 				priceId: z.string(),
@@ -64,6 +72,9 @@ export const stripeRouter = createTRPCRouter({
 			}),
 		)
 		.mutation(async ({ ctx, input }) => {
+			if (!ctx.user) {
+				throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+			}
 			const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, {
 				apiVersion: "2024-09-30.acacia",
 			});
@@ -89,6 +100,17 @@ export const stripeRouter = createTRPCRouter({
 				}
 			}
 
+			// Ajout : Crée un Stripe Customer si l'utilisateur n'en a pas
+			if (!stripeCustomerId) {
+				const customer = await stripe.customers.create({
+					email: user.email,
+					name: user.name, // si ce champ existe
+					metadata: { userId: user.id },
+				});
+				stripeCustomerId = customer.id;
+				await updateUser(user.id, { stripeCustomerId });
+			}
+
 			const session = await stripe.checkout.sessions.create({
 				mode: "subscription",
 				line_items: items,
@@ -99,13 +121,16 @@ export const stripeRouter = createTRPCRouter({
 					adminId: user.id,
 				},
 				allow_promotion_codes: true,
-				success_url: `${WEBSITE_URL}/dashboard/settings/servers?success=true`,
+				success_url: `${WEBSITE_URL}/dashboard/settings/profile?success=true`,
 				cancel_url: `${WEBSITE_URL}/dashboard/settings/billing`,
 			});
 
 			return { sessionId: session.id };
 		}),
-	createCustomerPortalSession: adminProcedure.mutation(async ({ ctx }) => {
+	createCustomerPortalSession: publicProcedure.mutation(async ({ ctx }) => {
+		if (!ctx.user) {
+			throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+		}
 		const user = await findUserById(ctx.user.id);
 
 		if (!user.stripeCustomerId) {
@@ -134,7 +159,10 @@ export const stripeRouter = createTRPCRouter({
 		}
 	}),
 
-	canCreateMoreServers: adminProcedure.query(async ({ ctx }) => {
+	canCreateMoreServers: publicProcedure.query(async ({ ctx }) => {
+		if (!ctx.user) {
+			throw new TRPCError({ code: "UNAUTHORIZED", message: "Not authenticated" });
+		}
 		const user = await findUserById(ctx.user.ownerId);
 		const servers = await findServersByUserId(user.id);
 

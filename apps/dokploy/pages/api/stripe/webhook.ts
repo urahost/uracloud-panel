@@ -74,12 +74,29 @@ export default async function handler(
 		case "customer.subscription.created": {
 			const newSubscription = event.data.object as Stripe.Subscription;
 			console.log("[Stripe] customer.subscription.created", { customer: newSubscription.customer, status: newSubscription.status });
+
+			// Récupère le prix (price) du premier item de la subscription
+			const priceId = newSubscription.items.data[0]?.price?.id;
+			let projectLimit = 1;
+			let serviceLimit = 2;
+			let plan = "free";
+			if (priceId) {
+				const price = await stripe.prices.retrieve(priceId, { expand: ["product"] });
+				const metadata = (price.product as any)?.metadata || {};
+				projectLimit = parseInt(metadata.maxProjects) || 1;
+				serviceLimit = parseInt(metadata.maxServices) || 2;
+				plan = metadata.plan || "free";
+			}
+
 			await db
 				.update(users_temp)
 				.set({
 					stripeSubscriptionId: newSubscription.id,
 					stripeCustomerId: newSubscription.customer as string,
 					subscriptionStatus: newSubscription.status,
+					projectLimit,
+					serviceLimit,
+					plan,
 				})
 				.where(eq(users_temp.stripeCustomerId, newSubscription.customer as string));
 			break;
@@ -87,10 +104,27 @@ export default async function handler(
 		case "customer.subscription.updated": {
 			const newSubscription = event.data.object as Stripe.Subscription;
 			console.log("[Stripe] customer.subscription.updated", { customer: newSubscription.customer, status: newSubscription.status });
+
+			// Récupère le prix (price) du premier item de la subscription
+			const priceId = newSubscription.items.data[0]?.price?.id;
+			let projectLimit = 1;
+			let serviceLimit = 2;
+			let plan = "free";
+			if (priceId) {
+				const price = await stripe.prices.retrieve(priceId, { expand: ["product"] });
+				const metadata = (price.product as any)?.metadata || {};
+				projectLimit = parseInt(metadata.maxProjects) || 1;
+				serviceLimit = parseInt(metadata.maxServices) || 2;
+				plan = metadata.plan || "free";
+			}
+
 			await db
 				.update(users_temp)
 				.set({
 					subscriptionStatus: newSubscription.status,
+					projectLimit,
+					serviceLimit,
+					plan,
 				})
 				.where(eq(users_temp.stripeCustomerId, newSubscription.customer as string));
 			break;

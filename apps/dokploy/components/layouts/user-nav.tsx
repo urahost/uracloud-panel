@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import {
 	DropdownMenu,
 	DropdownMenuContent,
@@ -49,7 +50,14 @@ export const UserNav = () => {
 						<AvatarFallback className="rounded-lg">CN</AvatarFallback>
 					</Avatar>
 					<div className="grid flex-1 text-left text-sm leading-tight">
-						<span className="truncate font-semibold">Account</span>
+						<div className="flex items-center w-full">
+							<span className="truncate font-semibold">Account</span>
+							{data?.user?.stripeCustomerId && data?.user?.stripeSubscriptionId && data?.user?.subscriptionStatus === 'active' && (
+								<div className="flex flex-grow justify-end">
+									<Badge variant="outline">Premium</Badge>
+								</div>
+							)}
+						</div>
 						<span className="truncate text-xs">{data?.user?.email}</span>
 					</div>
 					<ChevronsUpDown className="ml-auto size-4" />
@@ -79,6 +87,14 @@ export const UserNav = () => {
 						}}
 					>
 						Profile
+					</DropdownMenuItem>
+					<DropdownMenuItem
+						className="cursor-pointer"
+						onClick={() => {
+							router.push("/dashboard/settings/billing");
+						}}
+					>
+						Billing
 					</DropdownMenuItem>
 					<DropdownMenuItem
 						className="cursor-pointer"

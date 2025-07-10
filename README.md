@@ -5,7 +5,7 @@
   </br>
   </br>
   <p>Join us on Discord for help, feedback, and discussions!</p>
-  <a href="https://discord.gg/2tBnJ3jDJc">
+  <a href="https://discord.gg/urahost">
     <img src="https://discordapp.com/api/guilds/1234073262418563112/widget.png?style=banner2" alt="Discord Shield"/>
   </a>
 </div>

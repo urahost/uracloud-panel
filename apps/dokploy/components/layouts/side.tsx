@@ -379,7 +379,7 @@ const MENU: Menu = {
 		},
 		{
 			name: "Support",
-			url: "https://discord.gg/2tBnJ3jDJc",
+			url: "https://discord.gg/urahost",
 			icon: CircleHelp,
 		},
 		{
@@ -796,6 +796,9 @@ export default function Page({ children }: Props) {
 		pathname,
 	);
 
+	// Affichage conditionnel de la card Version gratuite selon l'état Stripe
+	const hasActiveStripeSub = !!auth?.user?.hasActiveSubscription;
+
 	if (!isLoaded) {
 		return <div className="w-full h-screen bg-background" />; // Placeholder mientras se carga
 	}
@@ -823,11 +826,11 @@ export default function Page({ children }: Props) {
 						size="lg"
 					> */}
 					<LogoWrapper />
-					{auth && !auth.enablePaidFeatures && (
+					{auth?.user && !auth.user.enablePaidFeatures && !hasActiveStripeSub && (
 						<div className="mb-4 p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-yellow-900 flex flex-col gap-2 mt-4">
 							<div className="font-semibold">Version gratuite</div>
 							<div>
-								Limite : {auth.projectLimit ?? 1} projet{(auth.projectLimit ?? 1) > 1 ? 's' : ''} et {auth.serviceLimit ?? 2} services maximum.
+								Limite : {auth.user.projectLimit} projet{(auth.user.projectLimit ?? 1) > 1 ? 's' : ''} et {auth.user.serviceLimit ?? 2} services maximum.
 							</div>
 							<div className="text-xs text-yellow-800">Passez à la version premium pour lever toutes les limites et débloquer toutes les fonctionnalités.</div>
 							<Link href="/dashboard/settings/billing">

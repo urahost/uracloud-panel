@@ -19,10 +19,12 @@ import {
 	apikey,
 	invitation,
 	member,
+	projects,
+	applications,
 } from "@dokploy/server/db/schema";
 import { TRPCError } from "@trpc/server";
 import * as bcrypt from "bcrypt";
-import { and, asc, eq, gt } from "drizzle-orm";
+import { and, asc, eq, gt, inArray } from "drizzle-orm";
 import { z } from "zod";
 import {
 	adminProcedure,
@@ -96,6 +98,8 @@ export const userRouter = createTRPCRouter({
 			return memberResult;
 		}),
 	get: protectedProcedure.query(async ({ ctx }) => {
+		// Récupère le user global (abonnement global)
+		const userGlobal = await findUserById(ctx.user.id);
 		const memberResult = await db.query.member.findFirst({
 			where: and(
 				eq(member.userId, ctx.user.id),
@@ -110,7 +114,51 @@ export const userRouter = createTRPCRouter({
 			},
 		});
 
-		return memberResult;
+		// Compte les projets de l'utilisateur dans l'organisation courante
+		const projectsCount = (
+			await db.query.projects.findMany({
+				where: and(
+					eq(projects.organizationId, ctx.session?.activeOrganizationId || ""),
+					eq(projects.userId, ctx.user.id),
+				),
+				columns: { projectId: true },
+			})
+		).length;
+
+		// Récupère les projectIds de l'utilisateur dans l'organisation courante
+		const userProjects = await db.query.projects.findMany({
+			where: and(
+				eq(projects.organizationId, ctx.session?.activeOrganizationId || ""),
+				eq(projects.userId, ctx.user.id),
+			),
+			columns: { projectId: true },
+		});
+		const userProjectIds = userProjects.map((p) => p.projectId);
+
+		// Compte les applications (services) liées à ces projets
+		let servicesCount = 0;
+		if (userProjectIds.length > 0) {
+			servicesCount = (
+				await db.query.applications.findMany({
+					where: inArray(applications.projectId, userProjectIds),
+					columns: { applicationId: true },
+				})
+			).length;
+		}
+
+		return {
+			...memberResult,
+			user: {
+				...memberResult?.user,
+				projectsCount,
+				servicesCount,
+				// Les infos d'abonnement viennent du user global
+				stripeCustomerId: userGlobal.stripeCustomerId,
+				stripeSubscriptionId: userGlobal.stripeSubscriptionId,
+				subscriptionStatus: userGlobal.subscriptionStatus,
+				hasActiveSubscription: !!(userGlobal.stripeSubscriptionId && userGlobal.subscriptionStatus === 'active'),
+			},
+		};
 	}),
 	haveRootAccess: protectedProcedure.query(async ({ ctx }) => {
 		if (!IS_CLOUD) {

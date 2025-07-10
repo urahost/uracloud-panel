@@ -19,6 +19,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Switch } from "@/components/ui/switch";
+import { Badge } from "@/components/ui/badge";
 import { generateSHA256Hash } from "@/lib/utils";
 import { api } from "@/utils/api";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -141,9 +142,13 @@ export const ProfileForm = () => {
 				<div className="rounded-xl bg-background shadow-md ">
 					<CardHeader className="flex flex-row gap-2 flex-wrap justify-between items-center">
 						<div>
-							<CardTitle className="text-xl flex flex-row gap-2">
+							<CardTitle className="text-xl flex flex-row gap-2 items-center">
 								<User className="size-6 text-muted-foreground self-center" />
 								{t("settings.profile.title")}
+								{/* Badge Premium */}
+								{data?.user?.stripeCustomerId && data?.user?.stripeSubscriptionId && data?.user?.subscriptionStatus === 'active' && (
+									<Badge variant="premium" className="ml-2">Premium</Badge>
+								)}
 							</CardTitle>
 							<CardDescription>
 								{t("settings.profile.description")}
