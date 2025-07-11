@@ -136,26 +136,53 @@ export const getUpdateData = async (): Promise<IUpdateData> => {
   } catch {
     return DEFAULT_UPDATE_DATA;
   }
-  const latestTag = await getDokployImageTag();
+  let latestTag = await getDokployImageTag();
+  let currentVersion = currentTag;
   let latestVersion = latestTag;
-  // Si le dernier tag est latest-amd64, essaye de trouver le tag versionné correspondant
-  if (latestTag === 'latest-amd64') {
-    // Récupère le digest de latest-amd64
-    const manifestRes = await fetch(
-      `https://ghcr.io/v2/urahost/uracloud-panel/dokploy/manifests/latest-amd64`,
-      { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
-    );
-    if (manifestRes.ok) {
-      const manifest = await manifestRes.json();
-      if (manifest.config && manifest.config.digest) {
-        const versionedTag = await getVersionedTagForDigest(manifest.config.digest);
-        if (versionedTag) {
-          latestVersion = versionedTag;
+
+  // Si le tag courant est latest-amd64, récupère le tag versionné réel
+  if (currentTag === 'latest-amd64') {
+    try {
+      const manifestRes = await fetch(
+        `https://ghcr.io/v2/urahost/uracloud-panel/dokploy/manifests/latest-amd64`,
+        { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+      );
+      if (manifestRes.ok) {
+        const manifest = await manifestRes.json();
+        if (manifest.config && manifest.config.digest) {
+          const versionedTag = await getVersionedTagForDigest(manifest.config.digest);
+          if (versionedTag) {
+            currentVersion = versionedTag;
+          }
         }
       }
+    } catch (e) {
+      // ignore
     }
   }
-  const updateAvailable = currentTag !== latestTag && currentTag !== latestVersion;
+  // Si le dernier tag est latest-amd64, récupère le tag versionné réel
+  if (latestTag === 'latest-amd64') {
+    try {
+      const manifestRes = await fetch(
+        `https://ghcr.io/v2/urahost/uracloud-panel/dokploy/manifests/latest-amd64`,
+        { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+      );
+      if (manifestRes.ok) {
+        const manifest = await manifestRes.json();
+        if (manifest.config && manifest.config.digest) {
+          const versionedTag = await getVersionedTagForDigest(manifest.config.digest);
+          if (versionedTag) {
+            latestVersion = versionedTag;
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+  // Ajoute des logs pour debug
+  console.log('[Dokploy Update] currentTag:', currentTag, '| currentVersion:', currentVersion, '| latestTag:', latestTag, '| latestVersion:', latestVersion);
+  const updateAvailable = currentVersion !== latestVersion;
   return { latestVersion, updateAvailable };
 };
 
