@@ -30,12 +30,14 @@ jobs:
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             TAG="latest"
             VERSION=$(node -p "require('./apps/dokploy/package.json').version")
+            echo "tags=${IMAGE_NAME}:${TAG}-amd64,${IMAGE_NAME}:${VERSION}-amd64" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" = "refs/heads/canary" ]; then
             TAG="canary"
+            echo "tags=${IMAGE_NAME}:${TAG}-amd64" >> $GITHUB_OUTPUT
           else
             TAG="feature"
+            echo "tags=${IMAGE_NAME}:${TAG}-amd64" >> $GITHUB_OUTPUT
           fi
-          echo "tags=${IMAGE_NAME}:${TAG}-amd64" >> $GITHUB_OUTPUT
 
       - name: Prepare env file
         run: |
@@ -72,12 +74,14 @@ jobs:
           if [ "${{ github.ref }}" = "refs/heads/main" ]; then
             TAG="latest"
             VERSION=$(node -p "require('./apps/dokploy/package.json').version")
+            echo "tags=${IMAGE_NAME}:${TAG}-arm64,${IMAGE_NAME}:${VERSION}-arm64" >> $GITHUB_OUTPUT
           elif [ "${{ github.ref }}" = "refs/heads/canary" ]; then
             TAG="canary"
+            echo "tags=${IMAGE_NAME}:${TAG}-arm64" >> $GITHUB_OUTPUT
           else
             TAG="feature"
+            echo "tags=${IMAGE_NAME}:${TAG}-arm64" >> $GITHUB_OUTPUT
           fi
-          echo "tags=${IMAGE_NAME}:${TAG}-arm64" >> $GITHUB_OUTPUT
 
       - name: Prepare env file
         run: |
