@@ -17,35 +17,30 @@ export const DEFAULT_UPDATE_DATA: IUpdateData = {
 	updateAvailable: false,
 };
 
-// Récupère dynamiquement le dernier tag de version depuis GHCR
+// Récupère dynamiquement le dernier tag de version depuis GHCR (ignore latest-amd64)
 export const getLatestRemoteTag = async (): Promise<string> => {
   const res = await fetch(
     'https://ghcr.io/v2/urahost/uracloud-panel/dokploy/tags/list',
     { headers: { Accept: 'application/json' } }
   );
-  if (!res.ok) return 'latest-amd64';
+  if (!res.ok) return '';
   const data = await res.json();
   const tags: string[] = data.tags || [];
-  // Filtre les tags versionnés de type X.Y.Z-amd64
+  // Filtre les tags versionnés de type X.Y.Z-amd64 (ignore latest-amd64)
   const versionedTags = tags.filter(t => /^\d+\.\d+\.\d+-amd64$/.test(t));
   if (versionedTags.length > 0) {
-    // Trie par version décroissante
+    // Trie par version décroissante (numérique)
     versionedTags.sort((a, b) => {
-      const vAparts = a.split('-');
-      const vBparts = b.split('-');
-      const vA = (vAparts[0] || '').split('.').map(Number);
-      const vB = (vBparts[0] || '').split('.').map(Number);
+      const vA = (a.split('-')[0] || '').split('.').map(Number);
+      const vB = (b.split('-')[0] || '').split('.').map(Number);
       for (let i = 0; i < 3; i++) {
         if ((vA[i] || 0) !== (vB[i] || 0)) return (vB[i] || 0) - (vA[i] || 0);
       }
       return 0;
     });
-    return versionedTags[0] || 'latest-amd64';
+    return versionedTags[0] ? versionedTags[0] : '';
   }
-  // Fallback sur latest-amd64 si aucun tag versionné trouvé
-  if (tags.includes('latest-amd64')) return 'latest-amd64';
-  if (tags.includes('canary-amd64')) return 'canary-amd64';
-  return tags[0] || 'latest-amd64';
+  return '';
 };
 
 export const getDokployImageTag = async () => {
@@ -136,11 +131,8 @@ export const getUpdateData = async (): Promise<IUpdateData> => {
   } catch {
     return DEFAULT_UPDATE_DATA;
   }
-  let latestTag = await getDokployImageTag();
-  let currentVersion = currentTag;
-  let latestVersion = latestTag;
-
   // Si le tag courant est latest-amd64, récupère le tag versionné réel
+  let currentVersion = currentTag;
   if (currentTag === 'latest-amd64') {
     try {
       const manifestRes = await fetch(
@@ -160,29 +152,25 @@ export const getUpdateData = async (): Promise<IUpdateData> => {
       // ignore
     }
   }
-  // Si le dernier tag est latest-amd64, récupère le tag versionné réel
-  if (latestTag === 'latest-amd64') {
-    try {
-      const manifestRes = await fetch(
-        `https://ghcr.io/v2/urahost/uracloud-panel/dokploy/manifests/latest-amd64`,
-        { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
-      );
-      if (manifestRes.ok) {
-        const manifest = await manifestRes.json();
-        if (manifest.config && manifest.config.digest) {
-          const versionedTag = await getVersionedTagForDigest(manifest.config.digest);
-          if (versionedTag) {
-            latestVersion = versionedTag;
-          }
-        }
-      }
-    } catch (e) {
-      // ignore
+  // Récupère le dernier tag versionné réel
+  const latestVersion = await getLatestRemoteTag();
+  // Compare numériquement les versions (ex: 0.24.10 > 0.24.9)
+  const parseVer = (tag: string) => (tag.split('-')[0] || '').split('.').map(Number);
+  const vCur = parseVer(currentVersion);
+  const vLat = parseVer(latestVersion);
+  let updateAvailable = false;
+  for (let i = 0; i < 3; i++) {
+    if ((vCur[i] || 0) < (vLat[i] || 0)) {
+      updateAvailable = true;
+      break;
+    } else if ((vCur[i] || 0) > (vLat[i] || 0)) {
+      updateAvailable = false;
+      break;
     }
   }
   // Ajoute des logs pour debug
-  console.log('[Dokploy Update] currentTag:', currentTag, '| currentVersion:', currentVersion, '| latestTag:', latestTag, '| latestVersion:', latestVersion);
-  const updateAvailable = currentVersion !== latestVersion;
+  console.log('[Dokploy Update] currentTag:', currentTag, '| currentVersion:', currentVersion, '| latestVersion:', latestVersion, '| updateAvailable:', updateAvailable);
+  // latestVersion est TOUJOURS le tag versionné réel à afficher dans l'UI
   return { latestVersion, updateAvailable };
 };
 

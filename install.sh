@@ -43,7 +43,10 @@ get_latest_docker_tag() {
     | tr -d '"' | tr ',' '\n' \
     | grep -v -E 'canary|sha256' \
     | grep 'amd64' \
-    | head -n1
+    | sed 's/-amd64$//' \
+    | sort -t. -k1,1n -k2,2n -k3,3n -r \
+    | head -n1 \
+    | awk '{print $1 "-amd64"}'
 }
 
 get_current_image() {
@@ -209,7 +212,7 @@ update_dokploy() {
     fi
     docker pull "$DOKPLOY_IMAGE" || { echo "Erreur pull image"; exit 1; }
     docker service update \
-      $(grep -v '^#' "$ENV_FILE" | sed 's/^/-e /') \
+      $(grep -v '^#' "$ENV_FILE" | sed 's/^/--env-add /') \
       --image "$DOKPLOY_IMAGE" dokploy
     echo "Custom Dokploy a été mis à jour vers: $DOKPLOY_IMAGE"
 }
