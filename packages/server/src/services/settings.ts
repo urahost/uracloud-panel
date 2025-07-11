@@ -18,20 +18,17 @@ export const DEFAULT_UPDATE_DATA: IUpdateData = {
 
 // Récupère dynamiquement le dernier tag de version depuis GHCR
 export const getLatestRemoteTag = async (): Promise<string> => {
-  // Utilise l'API GHCR pour lister les tags (nécessite que le repo soit public ou un token si privé)
   const res = await fetch(
     'https://ghcr.io/v2/urahost/uracloud-panel/dokploy/tags/list',
     { headers: { Accept: 'application/json' } }
   );
-  if (!res.ok) return 'latest';
+  if (!res.ok) return 'latest-amd64';
   const data = await res.json();
-  // Filtre les tags de type vX.Y.Z (ou adapte selon ta convention)
-  const tags = (data.tags || []).filter((t: string) => /^v\d+\.\d+\.\d+$/.test(t));
-  // Prend le dernier tag (en supposant qu'ils sont triés, sinon trie-les)
-  if (tags.length === 0) return 'latest';
-  // Trie par version décroissante
-  tags.sort((a: string, b: string) => b.localeCompare(a, undefined, { numeric: true, sensitivity: 'base' }));
-  return tags[0];
+  const tags: string[] = data.tags || [];
+  // Prend latest-amd64 si dispo, sinon canary-amd64, sinon le premier tag dispo
+  if (tags.includes('latest-amd64')) return 'latest-amd64';
+  if (tags.includes('canary-amd64')) return 'canary-amd64';
+  return tags[0] || 'latest-amd64';
 };
 
 export const getDokployImageTag = async () => {
