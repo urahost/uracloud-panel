@@ -72,59 +72,29 @@ export const getServiceImageDigest = async () => {
 	return currentDigest;
 };
 
-/** Returns latest version number and information whether server update is available by comparing current image's digest against digest for provided image tag via Docker hub API. */
+/** Returns Dokploy docker service image tag (not digest) */
+export const getServiceImageTag = async () => {
+  const { stdout } = await execAsync(
+    "docker service inspect dokploy --format '{{.Spec.TaskTemplate.ContainerSpec.Image}}'",
+  );
+  // Extrait le tag de l'image (après le dernier ':')
+  const image = stdout.trim();
+  const tag = image.split(':').pop()?.split('@')[0];
+  if (!tag) throw new Error('Could not get current service image tag');
+  return tag;
+};
+
+/** Returns latest version number and information whether server update is available by comparing current image's tag against the latest tag from GHCR. */
 export const getUpdateData = async (): Promise<IUpdateData> => {
-	let currentDigest: string;
-	try {
-		currentDigest = await getServiceImageDigest();
-	} catch {
-		// Docker service might not exist locally
-		// You can run the # Installation command for docker service create mentioned in the below docs to test it locally:
-		// https://docs.dokploy.com/docs/core/manual-installation
-		return DEFAULT_UPDATE_DATA;
-	}
-
-	const baseUrl = "https://hub.docker.com/v2/repositories/dokploy/dokploy/tags";
-	let url: string | null = `${baseUrl}?page_size=100`;
-	let allResults: { digest: string; name: string }[] = [];
-	while (url) {
-		const response = await fetch(url, {
-			method: "GET",
-			headers: { "Content-Type": "application/json" },
-		});
-
-		const data = (await response.json()) as {
-			next: string | null;
-			results: { digest: string; name: string }[];
-		};
-
-		allResults = allResults.concat(data.results);
-		url = data?.next;
-	}
-
-	const imageTag = await getDokployImageTag();
-	const searchedDigest = allResults.find((t) => t.name === imageTag)?.digest;
-
-	if (!searchedDigest) {
-		return DEFAULT_UPDATE_DATA;
-	}
-
-	if (imageTag === "latest") {
-		const versionedTag = allResults.find(
-			(t) => t.digest === searchedDigest && t.name.startsWith("v"),
-		);
-
-		if (!versionedTag) {
-			return DEFAULT_UPDATE_DATA;
-		}
-
-		const { name: latestVersion, digest } = versionedTag;
-		const updateAvailable = digest !== currentDigest;
-
-		return { latestVersion, updateAvailable };
-	}
-	const updateAvailable = searchedDigest !== currentDigest;
-	return { latestVersion: imageTag, updateAvailable };
+  let currentTag: string;
+  try {
+    currentTag = await getServiceImageTag();
+  } catch {
+    return DEFAULT_UPDATE_DATA;
+  }
+  const latestTag = await getDokployImageTag();
+  const updateAvailable = currentTag !== latestTag;
+  return { latestVersion: latestTag, updateAvailable };
 };
 
 interface TreeDataItem {
