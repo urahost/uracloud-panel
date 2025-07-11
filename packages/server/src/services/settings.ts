@@ -100,6 +100,33 @@ export const getServiceImageTag = async () => {
   return tag;
 };
 
+/**
+ * Pour un digest donné, retourne le tag versionné correspondant (ex: 0.24.7-amd64) sur GHCR
+ */
+export const getVersionedTagForDigest = async (digest: string): Promise<string | null> => {
+  const res = await fetch(
+    'https://ghcr.io/v2/urahost/uracloud-panel/dokploy/tags/list',
+    { headers: { Accept: 'application/json' } }
+  );
+  if (!res.ok) return null;
+  const data = await res.json();
+  const tags: string[] = data.tags || [];
+  for (const tag of tags) {
+    if (/^\d+\.\d+\.\d+-amd64$/.test(tag)) {
+      const manifestRes = await fetch(
+        `https://ghcr.io/v2/urahost/uracloud-panel/dokploy/manifests/${tag}`,
+        { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+      );
+      if (!manifestRes.ok) continue;
+      const manifest = await manifestRes.json();
+      if (manifest.config && manifest.config.digest === digest) {
+        return tag;
+      }
+    }
+  }
+  return null;
+};
+
 /** Returns latest version number and information whether server update is available by comparing current image's tag against the latest tag from GHCR. */
 export const getUpdateData = async (): Promise<IUpdateData> => {
   let currentTag: string;
@@ -109,8 +136,26 @@ export const getUpdateData = async (): Promise<IUpdateData> => {
     return DEFAULT_UPDATE_DATA;
   }
   const latestTag = await getDokployImageTag();
-  const updateAvailable = currentTag !== latestTag;
-  return { latestVersion: latestTag, updateAvailable };
+  let latestVersion = latestTag;
+  // Si le dernier tag est latest-amd64, essaye de trouver le tag versionné correspondant
+  if (latestTag === 'latest-amd64') {
+    // Récupère le digest de latest-amd64
+    const manifestRes = await fetch(
+      `https://ghcr.io/v2/urahost/uracloud-panel/dokploy/manifests/latest-amd64`,
+      { headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' } }
+    );
+    if (manifestRes.ok) {
+      const manifest = await manifestRes.json();
+      if (manifest.config && manifest.config.digest) {
+        const versionedTag = await getVersionedTagForDigest(manifest.config.digest);
+        if (versionedTag) {
+          latestVersion = versionedTag;
+        }
+      }
+    }
+  }
+  const updateAvailable = currentTag !== latestTag && currentTag !== latestVersion;
+  return { latestVersion, updateAvailable };
 };
 
 interface TreeDataItem {

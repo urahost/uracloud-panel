@@ -141,10 +141,10 @@ export const ShowBilling = () => {
               >
               {
                 !admin?.user.hasActiveSubscription && (
-                  <TabsList>
+                <TabsList>
                     <TabsTrigger value="monthly">Mensuel</TabsTrigger>
                     <TabsTrigger value="annual">Annuel</TabsTrigger>
-                  </TabsList>
+                </TabsList>
                 )
               }
               </Tabs>
@@ -208,41 +208,41 @@ export const ShowBilling = () => {
                   {/* Affichage des deux abonnements */}
                   {!admin?.user?.hasActiveSubscription && (
                     <>
-                      <div className="flex flex-col md:flex-row gap-6 mt-6">
-                        {filteredProducts.map((product) => {
-                          const price = product.selected_price;
-                          return (
-                            <label
-                              key={product.id}
-                              className={cn(
-                                "flex-1 border rounded-2xl p-6 cursor-pointer transition-all flex flex-col gap-2 shadow-sm hover:border-primary",
-                                selectedPriceId === price?.id && "border-primary ring-2 ring-primary"
-                              )}
-                            >
-                              <div className="flex items-center gap-3 mb-2">
-                                <input
-                                  type="radio"
+                  <div className="flex flex-col md:flex-row gap-6 mt-6">
+                    {filteredProducts.map((product) => {
+                      const price = product.selected_price;
+                      return (
+                        <label
+                          key={product.id}
+                          className={cn(
+                            "flex-1 border rounded-2xl p-6 cursor-pointer transition-all flex flex-col gap-2 shadow-sm hover:border-primary",
+                            selectedPriceId === price?.id && "border-primary ring-2 ring-primary"
+                          )}
+                        >
+                          <div className="flex items-center gap-3 mb-2">
+                            <input
+                              type="radio"
                                   name="plan"
-                                  checked={selectedPriceId === price?.id}
+                              checked={selectedPriceId === price?.id}
                                   onChange={() => {
                                     setSelectedPriceId(price?.id ?? null);
                                     console.log('[Billing] Offer selected:', price?.id);
                                   }}
-                                  className="accent-primary"
-                                />
+                              className="accent-primary"
+                            />
                                 <span className="font-semibold text-lg">{product.name}</span>
-                              </div>
+                          </div>
                               <div className="text-sm text-muted-foreground">{product.description}</div>
                               <div className="mt-2 font-bold text-xl">
                                 {price?.unit_amount && (price.unit_amount / 100).toLocaleString()} €
                                 <span className="text-xs font-normal text-muted-foreground ml-1">
                                   /{isAnnual ? "an" : "mois"}
-                                </span>
-                              </div>
-                            </label>
-                          );
-                        })}
-                      </div>
+                              </span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
                       <div className="flex justify-end mt-4">
                         <Button
                           onClick={() => {
