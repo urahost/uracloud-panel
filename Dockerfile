@@ -17,6 +17,8 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 ENV NODE_ENV=production
 RUN pnpm --filter=@dokploy/server build
+# Copie le .env.production AVANT le build Next.js pour injecter les variables frontend
+COPY .env.production .env
 RUN pnpm --filter=./apps/dokploy run build
 
 RUN pnpm --filter=./apps/dokploy --prod deploy /prod/dokploy

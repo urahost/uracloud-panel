@@ -121,15 +121,20 @@ install_dokploy() {
     --network dokploy-network \
     --mount type=volume,source=redis-data-volume,target=/data \
     redis:7
-    # Récupère le dernier tag Docker
-    latest_tag=$(get_latest_docker_tag)
-    if [ -z "$latest_tag" ]; then
-      echo "Impossible de récupérer le dernier tag Docker, fallback sur latest-amd64."
-      latest_tag="latest-amd64"
+    # Permet de passer une image explicite à l'installation
+    if [ -n "$1" ]; then
+      DOKPLOY_IMAGE="$1"
+      echo "Installation avec l'image explicitement fournie: $DOKPLOY_IMAGE"
+    else
+      latest_tag=$(get_latest_docker_tag)
+      if [ -z "$latest_tag" ]; then
+        echo "Erreur : Aucun tag versionné trouvé sur GHCR. Abandon."
+        exit 1
+      fi
+      DOKPLOY_IMAGE="ghcr.io/$GITHUB_ORG/$GITHUB_REPO/$DOKPLOY_COMPONENT:$latest_tag"
+      echo "Dernier tag Docker trouvé: $latest_tag"
+      echo "Installation avec l'image: $DOKPLOY_IMAGE"
     fi
-    DOKPLOY_IMAGE="ghcr.io/$GITHUB_ORG/$GITHUB_REPO/$DOKPLOY_COMPONENT:$latest_tag"
-    echo "Dernier tag Docker trouvé: $latest_tag"
-    echo "Installation avec l'image: $DOKPLOY_IMAGE"
     echo "Pulling custom Dokploy image: $DOKPLOY_IMAGE"
     docker pull "$DOKPLOY_IMAGE"
     if [ $? -ne 0 ]; then
