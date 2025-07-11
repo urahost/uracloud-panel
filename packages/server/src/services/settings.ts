@@ -5,6 +5,7 @@ import {
 	execAsync,
 	execAsyncRemote,
 } from "@dokploy/server/utils/process/execAsync";
+import { existsSync, readFileSync } from "node:fs";
 
 export interface IUpdateData {
 	latestVersion: string | null;
@@ -297,3 +298,21 @@ export const cleanupFullDocker = async (serverId?: string | null) => {
 		console.log(error);
 	}
 };
+
+/** Charge les variables d'un fichier .env dans process.env si elles ne sont pas déjà présentes */
+export function loadEnvFromFile(envPath = "/etc/dokploy/.env") {
+  if (!existsSync(envPath)) return;
+  const lines = readFileSync(envPath, "utf-8").split("\n");
+  for (const line of lines) {
+    if (!line.trim() || line.trim().startsWith("#")) continue;
+    const [key, ...rest] = line.split("=");
+    const value = rest.join("=").trim();
+    if (key && !(key in process.env)) {
+      process.env[key.trim()] = value.replace(/^['"]|['"]$/g, "");
+    }
+  }
+}
+// Appel automatique si on détecte qu'on n'est pas en prod Docker
+if (process.env.NODE_ENV !== "production" && existsSync("/etc/dokploy/.env")) {
+  loadEnvFromFile();
+}
