@@ -22,6 +22,7 @@ import { useState, useMemo } from "react";
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 );
+console.log('[Stripe] NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY:', process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
 
 export const calculatePrice = (count: number, isAnnual = false) => {
   if (isAnnual) {
