@@ -25,7 +25,23 @@ export const getLatestRemoteTag = async (): Promise<string> => {
   if (!res.ok) return 'latest-amd64';
   const data = await res.json();
   const tags: string[] = data.tags || [];
-  // Prend latest-amd64 si dispo, sinon canary-amd64, sinon le premier tag dispo
+  // Filtre les tags versionnés de type X.Y.Z-amd64
+  const versionedTags = tags.filter(t => /^\d+\.\d+\.\d+-amd64$/.test(t));
+  if (versionedTags.length > 0) {
+    // Trie par version décroissante
+    versionedTags.sort((a, b) => {
+      const vAparts = a.split('-');
+      const vBparts = b.split('-');
+      const vA = (vAparts[0] || '').split('.').map(Number);
+      const vB = (vBparts[0] || '').split('.').map(Number);
+      for (let i = 0; i < 3; i++) {
+        if ((vA[i] || 0) !== (vB[i] || 0)) return (vB[i] || 0) - (vA[i] || 0);
+      }
+      return 0;
+    });
+    return versionedTags[0] || 'latest-amd64';
+  }
+  // Fallback sur latest-amd64 si aucun tag versionné trouvé
   if (tags.includes('latest-amd64')) return 'latest-amd64';
   if (tags.includes('canary-amd64')) return 'canary-amd64';
   return tags[0] || 'latest-amd64';
