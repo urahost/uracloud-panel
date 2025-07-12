@@ -11,6 +11,7 @@ import {
 	apiSaveExternalPortPostgres,
 	apiUpdatePostgres,
 	postgres as postgresTable,
+	projects,
 } from "@/server/db/schema";
 import { cancelJobs } from "@/server/utils/backup";
 import {
@@ -23,6 +24,7 @@ import {
 	findBackupsByDbId,
 	findPostgresById,
 	findProjectById,
+	findUserById,
 	rebuildDatabase,
 	removePostgresById,
 	removeService,
@@ -55,6 +57,43 @@ export const postgresRouter = createTRPCRouter({
 						code: "UNAUTHORIZED",
 						message: "You need to use a server to create a Postgres",
 					});
+				}
+
+				// Vérifier la limite de services pour les utilisateurs non-premium
+				if (IS_CLOUD) {
+					const userGlobal = await findUserById(ctx.user.id);
+					if (!userGlobal?.enablePaidFeatures) {
+						const userProjects = await db.query.projects.findMany({
+							where: eq(projects.userId, ctx.user.id),
+							with: {
+								applications: true,
+								mariadb: true,
+								mongo: true,
+								mysql: true,
+								postgres: true,
+								redis: true,
+								compose: true,
+							},
+						});
+						const totalServices = userProjects.reduce((acc, p) =>
+							acc +
+								(p.applications?.length || 0) +
+								(p.mariadb?.length || 0) +
+								(p.mongo?.length || 0) +
+								(p.mysql?.length || 0) +
+								(p.postgres?.length || 0) +
+								(p.redis?.length || 0) +
+								(p.compose?.length || 0),
+							0,
+						);
+						
+						if (totalServices >= (userGlobal.serviceLimit || 2)) {
+							throw new TRPCError({
+								code: "FORBIDDEN",
+								message: `You can only create ${userGlobal.serviceLimit || 2} services on the free plan. Upgrade to create more services.`,
+							});
+						}
+					}
 				}
 
 				const project = await findProjectById(input.projectId);

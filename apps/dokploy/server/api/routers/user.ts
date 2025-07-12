@@ -21,6 +21,12 @@ import {
 	member,
 	projects,
 	applications,
+	postgres,
+	mysql,
+	mariadb,
+	mongo,
+	redis,
+	compose,
 } from "@dokploy/server/db/schema";
 import { TRPCError } from "@trpc/server";
 import * as bcrypt from "bcrypt";
@@ -135,15 +141,42 @@ export const userRouter = createTRPCRouter({
 		});
 		const userProjectIds = userProjects.map((p) => p.projectId);
 
-		// Compte les applications (services) liées à ces projets
+		// Compte tous les services (applications, databases, compose) liés à ces projets
 		let servicesCount = 0;
 		if (userProjectIds.length > 0) {
-			servicesCount = (
-				await db.query.applications.findMany({
+			const [apps, postgresServices, mysqlServices, mariadbServices, mongoServices, redisServices, composeServices] = await Promise.all([
+				db.query.applications.findMany({
 					where: inArray(applications.projectId, userProjectIds),
 					columns: { applicationId: true },
-				})
-			).length;
+				}),
+				db.query.postgres.findMany({
+					where: inArray(postgres.projectId, userProjectIds),
+					columns: { postgresId: true },
+				}),
+				db.query.mysql.findMany({
+					where: inArray(mysql.projectId, userProjectIds),
+					columns: { mysqlId: true },
+				}),
+				db.query.mariadb.findMany({
+					where: inArray(mariadb.projectId, userProjectIds),
+					columns: { mariadbId: true },
+				}),
+				db.query.mongo.findMany({
+					where: inArray(mongo.projectId, userProjectIds),
+					columns: { mongoId: true },
+				}),
+				db.query.redis.findMany({
+					where: inArray(redis.projectId, userProjectIds),
+					columns: { redisId: true },
+				}),
+				db.query.compose.findMany({
+					where: inArray(compose.projectId, userProjectIds),
+					columns: { composeId: true },
+				}),
+			]);
+
+			servicesCount = apps.length + postgresServices.length + mysqlServices.length + 
+							mariadbServices.length + mongoServices.length + redisServices.length + composeServices.length;
 		}
 
 		return {
@@ -152,6 +185,9 @@ export const userRouter = createTRPCRouter({
 				...memberResult?.user,
 				projectsCount,
 				servicesCount,
+				// Limites depuis le user global
+				projectLimit: userGlobal.projectLimit,
+				serviceLimit: userGlobal.serviceLimit,
 				// Les infos d'abonnement viennent du user global
 				stripeCustomerId: userGlobal.stripeCustomerId,
 				stripeSubscriptionId: userGlobal.stripeSubscriptionId,

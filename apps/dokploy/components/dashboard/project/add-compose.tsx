@@ -43,6 +43,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
+import { PromotionalModal } from "../settings/billing/promotional-modal";
 
 const AddComposeSchema = z.object({
 	composeType: z.enum(["docker-compose", "stack"]).optional(),
@@ -72,6 +73,7 @@ interface Props {
 export const AddCompose = ({ projectId, projectName }: Props) => {
 	const utils = api.useUtils();
 	const [visible, setVisible] = useState(false);
+	const [showPromoModal, setShowPromoModal] = useState(false);
 	const slug = slugify(projectName);
 	const { data: isCloud } = api.settings.isCloud.useQuery();
 	const { data: servers } = api.server.withSSHKey.useQuery();
@@ -81,8 +83,8 @@ export const AddCompose = ({ projectId, projectName }: Props) => {
 
 	const serviceLimitReached = useMemo(() => {
 		return (
-			!auth?.enablePaidFeatures &&
-			(auth?.totalServices ?? 0) >= (auth?.serviceLimit ?? 2)
+			!auth?.user?.enablePaidFeatures &&
+			(auth?.user?.servicesCount ?? 0) >= (auth?.user?.serviceLimit ?? 2)
 		);
 	}, [auth]);
 
@@ -115,6 +117,19 @@ export const AddCompose = ({ projectId, projectName }: Props) => {
 				await utils.project.one.invalidate({
 					projectId,
 				});
+				// Invalider les données utilisateur pour mettre à jour les compteurs
+				await utils.user.get.invalidate();
+				
+				// Déclencher la modal promo si l'utilisateur atteint 2 services et n'est pas premium
+				const currentServiceCount = (auth?.user?.servicesCount ?? 0) + 1;
+				if (
+					isCloud &&
+					!auth?.user?.hasActiveSubscription &&
+					!auth?.user?.enablePaidFeatures &&
+					currentServiceCount >= 2
+				) {
+					setTimeout(() => setShowPromoModal(true), 1000);
+				}
 			})
 			.catch(() => {
 				toast.error("Error creating the compose");
@@ -122,6 +137,7 @@ export const AddCompose = ({ projectId, projectName }: Props) => {
 	};
 
 	return (
+		<>
 		<Dialog open={visible} onOpenChange={setVisible}>
 			<DialogTrigger className="w-full">
 				<DropdownMenuItem
@@ -296,5 +312,11 @@ export const AddCompose = ({ projectId, projectName }: Props) => {
 				</Form>
 			</DialogContent>
 		</Dialog>
+		
+		<PromotionalModal 
+			isOpen={showPromoModal} 
+			onClose={() => setShowPromoModal(false)} 
+		/>
+		</>
 	);
 };
