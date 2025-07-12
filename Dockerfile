@@ -15,10 +15,15 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 
 # Deploy only the dokploy app
 
+# Receive build args for frontend environment variables
+ARG NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
+
 ENV NODE_ENV=production
+ENV NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=$NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 RUN pnpm --filter=@dokploy/server build
 # Copie le .env.production AVANT le build Next.js pour injecter les variables frontend
 COPY .env.production .env
+COPY apps/dokploy/.env.production apps/dokploy/.env.production
 RUN pnpm --filter=./apps/dokploy run build
 
 RUN pnpm --filter=./apps/dokploy --prod deploy /prod/dokploy
