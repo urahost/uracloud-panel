@@ -19,6 +19,10 @@ import {
 import Link from "next/link";
 import { useState, useMemo } from "react";
 
+console.log('[Stripe Debug] Raw env var:', process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+console.log('[Stripe Debug] Env var length:', process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY?.length);
+console.log('[Stripe Debug] Env var type:', typeof process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY);
+
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!
 );

@@ -42,6 +42,9 @@ jobs:
         run: |
           cp apps/dokploy/.env.production.example .env.production
           cp apps/dokploy/.env.production.example apps/dokploy/.env.production
+          # Inject Stripe keys from secrets
+          echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}" >> .env.production
+          echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}" >> apps/dokploy/.env.production
 
       - name: Build and push
         uses: docker/build-push-action@v5
@@ -84,6 +87,9 @@ jobs:
         run: |
           cp apps/dokploy/.env.production.example .env.production
           cp apps/dokploy/.env.production.example apps/dokploy/.env.production
+          # Inject Stripe keys from secrets
+          echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}" >> .env.production
+          echo "NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=${{ secrets.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY }}" >> apps/dokploy/.env.production
 
       - name: Build and push
         uses: docker/build-push-action@v5
